@@ -35,6 +35,8 @@ const QRScanner: React.FC = () => {
   const location = state.locations.find(loc => loc.id === locationId);
 
   useEffect(() => {
+    console.log('QRScanner mounted, location:', location);
+    
     if (!location) {
       addToast({ type: 'error', message: 'Lokasi tidak ditemukan' });
       navigate('/dashboard');
@@ -47,12 +49,18 @@ const QRScanner: React.FC = () => {
       return;
     }
 
+    console.log('Initializing QR reader...');
     const qrReader = new BrowserMultiFormatReader();
     setReader(qrReader);
 
-    // Auto-start camera when component mounts
-    startCamera();
+    // Start camera after a short delay to ensure component is mounted
+    const timer = setTimeout(() => {
+      console.log('Starting camera...');
+      startCamera();
+    }, 100);
+    
     return () => {
+      clearTimeout(timer);
       qrReader.reset();
       stopCamera();
       setIsScanning(false);
@@ -60,19 +68,28 @@ const QRScanner: React.FC = () => {
   }, [location, navigate, addToast, stopCamera, startCamera]);
 
   useEffect(() => {
+    console.log('Stream/reader effect:', { stream: !!stream, reader: !!reader, video: !!videoRef.current, isScanning, showManualInput });
+    
     if (stream && reader && videoRef.current && !isScanning && !showManualInput) {
+      console.log('Starting QR scanning...');
       setIsScanning(true);
       
       const scanQR = async () => {
         try {
+          if (!videoRef.current || showManualInput) {
+            return;
+          }
+          
           const result = await reader.decodeOnceFromVideoDevice(undefined, videoRef.current!);
           if (result) {
             const scannedCode = result.getText();
+            console.log('QR Code detected:', scannedCode);
             handleQRCodeDetected(scannedCode);
+            return;
           }
         } catch (error) {
           // Continue scanning - this is normal when no QR code is detected
-          if (!showManualInput && stream) {
+          if (!showManualInput && stream && !isScanning) {
             setTimeout(scanQR, 100); // Retry after 100ms
           }
         }
@@ -80,21 +97,24 @@ const QRScanner: React.FC = () => {
       
       scanQR();
     }
-  }, [stream, reader, isScanning, showManualInput]);
+  }, [stream, reader, isScanning, showManualInput, handleQRCodeDetected]);
 
   useEffect(() => {
     // Reset scanning state when switching between camera and manual input
     if (showManualInput) {
+      console.log('Switching to manual input, stopping scanner');
       setIsScanning(false);
       if (reader) {
         reader.reset();
       }
     } else if (stream && reader && videoRef.current) {
+      console.log('Switching back to camera, resetting scanner');
       setIsScanning(false); // Reset to allow re-scanning
     }
   }, [showManualInput, stream, reader]);
 
   const handleQRCodeDetected = useCallback((code: string) => {
+    console.log('Handling QR code:', code, 'Expected:', location?.qrCode);
     if (!location) return;
 
     // Stop scanning to prevent multiple detections
@@ -111,11 +131,9 @@ const QRScanner: React.FC = () => {
       addToast({ type: 'error', message: 'QR Code tidak valid untuk lokasi ini' });
       // Allow scanning again after a short delay
       setTimeout(() => {
-        if (result) {
-          const scannedCode = result.getText();
-          handleQRCodeDetected(scannedCode);
+        if (stream && !showManualInput) {
+          setIsScanning(false);
         }
-        setIsScanning(false);
       }, 2000);
     }
   }, [location, locationId, navigate, addToast]);
@@ -124,6 +142,7 @@ const QRScanner: React.FC = () => {
     if (!location) return;
 
     const upperCode = manualCode.toUpperCase().trim();
+    console.log('Manual code submission:', upperCode, 'Expected:', location.qrCode);
     if (upperCode === location.qrCode) {
       addToast({ type: 'success', message: 'Kode berhasil diverifikasi!' });
       stopCamera();
@@ -154,6 +173,17 @@ const QRScanner: React.FC = () => {
     }
   };
 
+  // Debug logging
+  useEffect(() => {
+    console.log('QRScanner state:', {
+      stream: !!stream,
+      cameraLoading,
+      cameraError,
+      isScanning,
+      showManualInput,
+      location: location?.name
+    });
+  }, [stream, cameraLoading, cameraError, isScanning, showManualInput, location]);
   if (!location) {
     return <Loading fullScreen message="Memuat lokasi..." />;
   }
@@ -175,6 +205,9 @@ const QRScanner: React.FC = () => {
           <p className="text-text-muted text-sm">
             Pindai QR Code yang tersedia di lokasi ini untuk melanjutkan tantangan
           </p>
+          <div className="mt-2 text-xs text-gold">
+            Expected QR Code: {location.qrCode}
+          </div>
         </motion.div>
 
         {/* Camera View */}
@@ -218,9 +251,16 @@ const QRScanner: React.FC = () => {
                         <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-gold rounded-tr-lg" />
                         <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-gold rounded-bl-lg" />
                         <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-gold rounded-br-lg" />
+                        
+                        {/* Scanning indicator */}
+                        {isScanning && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-full h-1 bg-gold animate-pulse" />
+                          </div>
+                        )}
                       </div>
                       <p className="text-text-light text-center mt-4 text-sm">
-                        Arahkan kamera ke QR Code
+                        {isScanning ? 'Memindai QR Code...' : 'Arahkan kamera ke QR Code'}
                       </p>
                     </div>
                   </div>
@@ -315,13 +355,6 @@ const QRScanner: React.FC = () => {
           </Button>
         </div>
       </div>
-      
-      <style jsx>{`
-        @keyframes scan {
-          0% { transform: translateY(-100%); }
-          100% { transform: translateY(6400%); }
-        }
-      `}</style>
     </div>
   );
 };
