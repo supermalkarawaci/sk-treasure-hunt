@@ -7,6 +7,7 @@ import Toast from './components/UI/Toast';
 import Registration from './pages/Registration';
 import Dashboard from './pages/Dashboard';
 import QRScanner from './pages/QRScanner';
+import PhotoCapture from './pages/PhotoCapture';
 import Map from './pages/Map';
 
 // PWA Registration
@@ -34,6 +35,7 @@ function App() {
             <Route path="/" element={<Registration />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/scanner/:locationId" element={<QRScanner />} />
+            <Route path="/photo/:locationId" element={<PhotoCapture />} />
             <Route path="/map" element={<Map />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

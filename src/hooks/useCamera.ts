@@ -12,20 +12,30 @@ export const useCamera = () => {
     setError(null);
 
     try {
+      // Request camera permissions first
+      const permissions = await navigator.permissions.query({ name: 'camera' as PermissionName });
+      if (permissions.state === 'denied') {
+        throw new Error('Akses kamera ditolak. Silakan aktifkan di pengaturan browser.');
+      }
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
+          aspectRatio: 1.0
         }
       });
 
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        // Ensure video plays
+        await videoRef.current.play();
       }
     } catch (err) {
-      setError('Tidak dapat mengakses kamera. Pastikan izin kamera telah diberikan.');
+      const errorMessage = err instanceof Error ? err.message : 'Tidak dapat mengakses kamera';
+      setError(errorMessage);
       console.error('Camera access error:', err);
     } finally {
       setIsLoading(false);
@@ -36,6 +46,9 @@ export const useCamera = () => {
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
   }, [stream]);
 
@@ -57,7 +70,13 @@ export const useCamera = () => {
 
   const switchCamera = useCallback(() => {
     setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
-    stopCamera();
+    if (stream) {
+      stopCamera();
+      // Restart camera with new facing mode after a short delay
+      setTimeout(() => {
+        startCamera();
+      }, 100);
+    }
   }, [stopCamera]);
 
   return {

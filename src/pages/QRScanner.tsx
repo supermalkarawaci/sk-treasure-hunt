@@ -50,33 +50,73 @@ const QRScanner: React.FC = () => {
     const qrReader = new BrowserMultiFormatReader();
     setReader(qrReader);
 
+    // Auto-start camera when component mounts
+    startCamera();
     return () => {
       qrReader.reset();
       stopCamera();
+      setIsScanning(false);
     };
-  }, [location, navigate, addToast, stopCamera]);
+  }, [location, navigate, addToast, stopCamera, startCamera]);
 
   useEffect(() => {
-    if (stream && reader && videoRef.current && !isScanning) {
+    if (stream && reader && videoRef.current && !isScanning && !showManualInput) {
       setIsScanning(true);
       
-      reader.decodeFromVideoDevice(undefined, videoRef.current, (result, error) => {
-        if (result) {
-          const scannedCode = result.getText();
-          handleQRCodeDetected(scannedCode);
+      const scanQR = async () => {
+        try {
+          const result = await reader.decodeOnceFromVideoDevice(undefined, videoRef.current!);
+          if (result) {
+            const scannedCode = result.getText();
+            handleQRCodeDetected(scannedCode);
+          }
+        } catch (error) {
+          // Continue scanning - this is normal when no QR code is detected
+          if (!showManualInput && stream) {
+            setTimeout(scanQR, 100); // Retry after 100ms
+          }
         }
-      });
+      };
+      
+      scanQR();
     }
-  }, [stream, reader, isScanning]);
+  }, [stream, reader, isScanning, showManualInput]);
+
+  useEffect(() => {
+    // Reset scanning state when switching between camera and manual input
+    if (showManualInput) {
+      setIsScanning(false);
+      if (reader) {
+        reader.reset();
+      }
+    } else if (stream && reader && videoRef.current) {
+      setIsScanning(false); // Reset to allow re-scanning
+    }
+  }, [showManualInput, stream, reader]);
 
   const handleQRCodeDetected = useCallback((code: string) => {
     if (!location) return;
 
+    // Stop scanning to prevent multiple detections
+    setIsScanning(false);
+    if (reader) {
+      reader.reset();
+    }
+
     if (code === location.qrCode) {
       addToast({ type: 'success', message: 'QR Code berhasil dipindai!' });
+      stopCamera();
       navigate(`/photo/${locationId}`);
     } else {
       addToast({ type: 'error', message: 'QR Code tidak valid untuk lokasi ini' });
+      // Allow scanning again after a short delay
+      setTimeout(() => {
+        if (result) {
+          const scannedCode = result.getText();
+          handleQRCodeDetected(scannedCode);
+        }
+        setIsScanning(false);
+      }, 2000);
     }
   }, [location, locationId, navigate, addToast]);
 
@@ -86,6 +126,7 @@ const QRScanner: React.FC = () => {
     const upperCode = manualCode.toUpperCase().trim();
     if (upperCode === location.qrCode) {
       addToast({ type: 'success', message: 'Kode berhasil diverifikasi!' });
+      stopCamera();
       navigate(`/photo/${locationId}`);
     } else {
       addToast({ type: 'error', message: 'Kode tidak valid untuk lokasi ini' });
@@ -99,9 +140,9 @@ const QRScanner: React.FC = () => {
       const track = stream.getVideoTracks()[0];
       const capabilities = track.getCapabilities();
       
-      if (capabilities.torch) {
+      if ('torch' in capabilities) {
         await track.applyConstraints({
-          advanced: [{ torch: !flashEnabled }]
+          advanced: [{ torch: !flashEnabled } as any]
         });
         setFlashEnabled(!flashEnabled);
       } else {
@@ -274,6 +315,13 @@ const QRScanner: React.FC = () => {
           </Button>
         </div>
       </div>
+      
+      <style jsx>{`
+        @keyframes scan {
+          0% { transform: translateY(-100%); }
+          100% { transform: translateY(6400%); }
+        }
+      `}</style>
     </div>
   );
 };
