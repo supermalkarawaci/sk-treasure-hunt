@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import QRScanner from './pages/QRScanner';
 import PhotoCapture from './pages/PhotoCapture';
 import Map from './pages/Map';
+import Progress from './pages/Progress';
 
 // PWA Registration
 const registerSW = async () => {
@@ -37,6 +38,7 @@ function App() {
             <Route path="/scanner/:locationId" element={<QRScanner />} />
             <Route path="/photo/:locationId" element={<PhotoCapture />} />
             <Route path="/map" element={<Map />} />
+            <Route path="/progress" element={<Progress />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <Toast />
